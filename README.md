@@ -44,7 +44,7 @@ draw a route and "walk", "bike", "drive" or "fly" along real roads at realistic 
 ### Option A: build the .exe
 
 ```
-git clone https://github.com/YOUR-USER/nolocation.git
+git clone https://github.com/puyke/nolocation.git
 cd nolocation
 build_windows.bat
 ```
@@ -104,7 +104,7 @@ The software is provided as is, without warranty.
 
 If NoLocation is useful to you, you can support its development:
 
-**[Donate here]([https://YOUR-DONATION-LINK](https://buymeacoffee.com/puyke))**
+**[Buy me a coffee](https://buymeacoffee.com/puyke)**
 
 ## Contributing
 
