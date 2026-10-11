@@ -104,7 +104,7 @@ The software is provided as is, without warranty.
 
 If NoLocation is useful to you, you can support its development:
 
-**[Donate here](https://YOUR-DONATION-LINK)**
+**[Donate here]([https://YOUR-DONATION-LINK](https://buymeacoffee.com/puyke))**
 
 ## Contributing
 
