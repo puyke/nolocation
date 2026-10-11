@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NoLocation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root{
+    --ink:#060b1f; --glass:rgba(11,18,44,.93); --glass2:rgba(18,28,66,.7);
+    --line:rgba(110,140,255,.16); --line2:rgba(110,140,255,.32);
+    --text:#e7ecff; --muted:#8a96c4; --accent:#4d7cff; --glow:#7fd0ff; --amber:#d9a85f;
+    --ok:#5fe0b0; --bad:#ff7a8a; --warn:#ffc46b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--ink);color:var(--text);overflow:hidden;user-select:none;
+        font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Inter,"Segoe UI",system-ui,sans-serif;
+        letter-spacing:-.011em;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  #map{position:fixed;inset:0;background:var(--ink)}
+  .maplibregl-ctrl-attrib{background:rgba(6,11,31,.55)!important;color:#4a5784!important;font-size:9px!important;margin:0 8px 6px 0!important;border-radius:8px}
+  .maplibregl-ctrl-attrib a{color:#5b6896!important}
+  .maplibregl-ctrl-attrib-button{filter:invert(.6)}
+  .maplibregl-canvas{outline:none}
+
+  /* arayuz katmani */
+  #ui{position:fixed;inset:0;z-index:1000;pointer-events:none;transition:opacity .22s}
+  #ui.hidden{opacity:0}
+  #ui.hidden *{pointer-events:none!important}
+  .g{pointer-events:auto;background:var(--glass);border:1px solid var(--line);border-radius:14px;
+        box-shadow:0 10px 34px rgba(0,0,0,.45)}
+
+  #dev{position:absolute;left:18px;top:18px;display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:999px}
+  #dot{width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 3px rgba(255,122,138,.15)}
+  #dev.on #dot{background:var(--ok);box-shadow:0 0 0 3px rgba(95,224,176,.16),0 0 10px var(--ok)}
+  #dev.busy #dot{background:var(--warn);box-shadow:0 0 0 3px rgba(255,196,107,.16)}
+  #dev{cursor:pointer;transition:background .15s}
+  #dev:hover{background:rgba(24,36,84,.95)}
+  #dev:active{transform:scale(.97)}
+
+  #search{position:absolute;left:50%;top:18px;transform:translateX(-50%);width:min(440px,calc(100% - 520px));min-width:260px;
+        display:flex;align-items:center;gap:10px;padding:0 14px;height:44px}
+  #search svg{flex:none;opacity:.7}
+  #q{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font:inherit;font-size:14px;user-select:text}
+  #q::placeholder{color:var(--muted)}
+  #search{overflow:visible}
+  #sug{position:absolute;left:0;right:0;top:52px;max-height:min(420px,calc(100vh - 150px));overflow:auto;padding:6px;display:none;
+        background:rgba(10,16,40,.98);border:1px solid var(--line2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+  #sug.open{display:block}
+  #sug h6{margin:6px 10px 4px;font-size:11.5px;font-weight:500;color:var(--muted)}
+  .si{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer}
+  .si.sel,.si:hover{background:rgba(77,124,255,.18)}
+  .si .t{flex:1;min-width:0}
+  .si b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .si small{display:block;color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .si .ic{flex:none;opacity:.6}
+  .si .star{flex:none;width:28px;height:28px;border:0;background:none;border-radius:8px;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center}
+  .si .star:hover{background:rgba(255,255,255,.08)}
+  .si .star.on{color:var(--amber)}
+  .si .star.on svg{fill:currentColor}
+  .sempty{padding:12px 10px;color:var(--muted)}
+
+  #seg{position:absolute;right:18px;top:18px;display:flex;padding:4px;gap:2px}
+  #seg button{border:0;background:none;color:var(--muted);font:inherit;padding:7px 16px;border-radius:10px;cursor:pointer}
+  #seg button.act{background:var(--accent);color:#fff;box-shadow:0 0 16px rgba(77,124,255,.5)}
+
+  #zoom{position:absolute;right:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;padding:4px;gap:2px}
+  .ib{width:40px;height:40px;border:0;background:none;color:var(--text);border-radius:10px;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;font-size:20px}
+  .ib:hover{background:var(--glass2)}
+
+  #dock{position:absolute;left:18px;bottom:18px;display:flex;align-items:center;gap:2px;padding:4px;border-radius:18px}
+  .mode{width:42px;height:42px;border:0;background:none;color:var(--muted);border-radius:13px;cursor:pointer;padding:0;
+        display:flex;align-items:center;justify-content:center;transition:background .18s,color .18s,box-shadow .18s}
+  .mode:hover{color:var(--text);background:rgba(255,255,255,.05)}
+  .mode.act{background:var(--accent);color:#fff;box-shadow:0 0 18px rgba(77,124,255,.55)}
+  .mode svg{width:21px;height:21px}
+  .vsep{width:1px;height:22px;background:var(--line2);margin:0 5px;display:block}
+  svg.gl{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  svg.gl.solid{fill:currentColor;stroke:currentColor;stroke-width:.8}
+
+  #bottom{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px}
+  #info{padding:6px 14px;border-radius:999px;color:var(--muted);font-size:12.5px;min-height:30px;display:flex;align-items:center}
+  #actRow{display:flex;gap:8px;align-items:center}
+  .big{height:50px;padding:0 38px;border-radius:999px;border:1px solid rgba(160,190,255,.4);cursor:pointer;
+        background:linear-gradient(180deg,#5b87ff,#3a63e0);color:#fff;font:inherit;font-size:15.5px;font-weight:600;
+        box-shadow:0 8px 28px rgba(60,100,235,.55),inset 0 1px 0 rgba(255,255,255,.25);pointer-events:auto}
+  .big:hover{filter:brightness(1.08)}
+  .big:disabled{background:var(--glass);border-color:var(--line);color:var(--muted);box-shadow:none;cursor:default;filter:none}
+  .sm{height:50px;min-width:50px;padding:0 16px;border-radius:999px;color:var(--text);font:inherit;cursor:pointer}
+  .sm:hover{background:var(--glass2)}
+  #barBox{width:220px;height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;display:none}
+  #prog{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--glow));transition:width .8s linear}
+
+  /* ortada acilan ayar penceresi */
+  #scrim{position:fixed;inset:0;z-index:1500;background:rgba(3,6,16,.35);opacity:0;pointer-events:none;transition:opacity .18s}
+  #scrim.open{opacity:1;pointer-events:auto}
+  #pop{position:fixed;left:50%;top:50%;z-index:1600;width:380px;max-height:calc(100vh - 40px);overflow:auto;padding:18px;border-radius:18px;
+        background:rgba(10,16,40,.96);border:1px solid var(--line2);box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px rgba(77,124,255,.08);
+        transform:translate(-50%,-47%) scale(.96);opacity:0;pointer-events:none;transition:.17s ease}
+  #pop.open{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+  .lbl{color:var(--text);font-size:14.5px;font-weight:600;margin:0 0 9px;letter-spacing:-.015em}
+  .chips{display:flex;gap:6px}
+  .chip{flex:1;padding:9px 0;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--muted);font:inherit;cursor:pointer}
+  .chip.act{color:#fff;border-color:var(--accent);background:rgba(77,124,255,.2)}
+  .row{display:flex;align-items:center;gap:10px}
+  .sp{margin-top:16px}
+  #spN{width:86px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:8px 10px;font:inherit;outline:none}
+  #spN:focus{border-color:var(--accent)}
+  .check{display:flex;align-items:center;gap:9px;color:var(--text);cursor:pointer}
+  .check input{accent-color:var(--accent);width:16px;height:16px}
+  .pbtn{flex:1;white-space:nowrap;padding:10px 8px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:inherit;cursor:pointer}
+  .pbtn:hover{border-color:var(--line2)}
+  .pbtn.warn{color:var(--bad)}
+  .chips.three .chip{padding:9px 0;font-size:12.5px}
+  .hint{color:var(--muted);font-size:11.5px;margin-top:6px}
+  #stTxt{color:var(--muted);font-size:12.5px;margin-top:14px}
+
+  #toast{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:2000;background:rgba(40,16,26,.95);border:1px solid #5a2a3a;
+        color:#ffc2cc;padding:9px 16px;border-radius:12px;display:none;max-width:70%;pointer-events:none}
+  #toast.ok{background:rgba(12,30,40,.95);border-color:#245a70;color:#b8ecff}
+  #reveal{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);width:44px;height:12px;z-index:1999;cursor:pointer;
+        display:none;align-items:center;justify-content:center}
+  #reveal i{width:5px;height:5px;border-radius:50%;background:#2a3a78;display:block}
+  #reveal.show{display:flex}
+
+  /* tek goz: nokta uzerinde. acik = gercek konum, kapali + X = konum degistirilmis */
+  .meWrap{position:relative;width:32px;height:32px;pointer-events:none}
+  .meWrap .eye{width:44px;height:auto}
+  .mbadge{position:absolute;left:50%;top:0;width:32px;height:32px;margin-left:-16px;border-radius:50%;color:#fff;
+        background:rgba(9,16,46,.94);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;
+        box-shadow:0 0 0 5px rgba(77,124,255,.18),0 0 18px rgba(77,124,255,.8)}
+  .mbadge svg{width:18px;height:18px}
+  .mbadge.spoof{border-color:var(--amber);box-shadow:0 0 0 5px rgba(217,168,95,.18),0 0 18px rgba(217,168,95,.75)}
+  .mbadge{transition:border-color .3s,box-shadow .3s}
+  .ring{position:absolute;left:50%;top:0;width:32px;height:32px;margin-left:-16px;border-radius:50%;
+        border:2px solid var(--glow);opacity:0;pointer-events:none}
+  .spd{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .spd span{flex:1;color:var(--text)}
+  .spd input{width:92px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--text);border-radius:10px;
+        padding:8px 10px;font:inherit;outline:none;text-align:right}
+  .spd input:focus{border-color:var(--accent)}
+  .spd em{font-style:normal;color:var(--muted);width:38px}
+  .eye{display:block;overflow:visible;filter:drop-shadow(0 0 8px rgba(77,124,255,.7))}
+  .eye *{transform-box:fill-box;transform-origin:center}
+  .eye .almond{fill:rgba(77,124,255,.16);stroke:#d4e2ff;stroke-width:2.4;stroke-linejoin:round;
+        transition:transform .38s cubic-bezier(.65,0,.3,1)}
+  .eye .iris{fill:none;stroke:var(--glow);stroke-width:2.2;transition:opacity .18s,transform .38s cubic-bezier(.65,0,.3,1)}
+  .eye .pupil{fill:#fff;transition:opacity .18s,transform .38s cubic-bezier(.65,0,.3,1)}
+  .eye .x{fill:none;stroke:var(--bad);stroke-width:3.2;stroke-linecap:round;opacity:0;transform:scale(.4);
+        transition:opacity .22s .2s,transform .3s .2s cubic-bezier(.3,1.4,.5,1)}
+  .eye.closed .almond{transform:scaleY(.1)}
+  .eye.closed .iris,.eye.closed .pupil{opacity:0;transform:scaleY(.1)}
+  .eye.closed .x{opacity:1;transform:scale(1)}
+
+  .d{border-radius:50%}
+  .tgt{width:14px;height:14px;border:2px solid var(--glow);background:rgba(127,208,255,.2);box-shadow:0 0 12px rgba(127,208,255,.7)}
+  .wp{width:10px;height:10px;background:var(--glow);border:2px solid #fff;box-shadow:0 0 10px rgba(127,208,255,.8)}
+  @media (max-width:900px){#search{width:calc(100% - 360px)}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="ui">
+  <div id="dev" class="g" title="Toggle connection"><span id="dot"></span><span id="devTxt">Starting…</span></div>
+
+  <div id="search" class="g">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9fb0e8" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="q" type="text" placeholder="Search address or place" autocomplete="off" spellcheck="false">
+    <div id="sug"></div>
+  </div>
+
+  <div id="seg" class="g">
+    <button id="mTp" class="act">Teleport</button>
+    <button id="mRt">Route</button>
+  </div>
+
+  <div id="zoom" class="g">
+    <button class="ib" id="zIn" title="Zoom in">+</button>
+    <button class="ib" id="zOut" title="Zoom out">−</button>
+    <button class="ib" id="zMe" title="Go to my location and follow">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+  </div>
+
+  <div id="dock" class="g">
+    <button class="mode act" data-k="walk" title="Walk"></button>
+    <button class="mode" data-k="bike" title="Bike"></button>
+    <button class="mode" data-k="car" title="Car"></button>
+    <button class="mode" data-k="plane" title="Plane"></button>
+    <i class="vsep"></i>
+    <button class="mode" id="gear" title="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+
+  <div id="bottom">
+    <div id="info" class="g">Pick a point on the map</div>
+    <div id="barBox"><div id="prog"></div></div>
+    <div id="actRow">
+      <button class="sm g" id="btnUndo" style="display:none">Undo</button>
+      <button class="big" id="btnTp" disabled>Teleport</button>
+      <button class="big" id="btnGo" disabled style="display:none">Start</button>
+      <button class="sm g" id="btnClr" style="display:none">Clear</button>
+      <button class="sm g" id="btnPause" style="display:none">Pause</button>
+      <button class="sm g" id="btnStop" style="display:none">Stop</button>
+    </div>
+  </div>
+</div>
+
+<div id="scrim"></div>
+<div id="pop">
+  <div class="lbl">Mode Speeds</div>
+  <div class="spd"><span>Walk</span><input type="number" id="sp_walk" min="0.5" max="2000" step="0.5"><em>km/h</em></div>
+  <div class="spd"><span>Bike</span><input type="number" id="sp_bike" min="0.5" max="2000" step="0.5"><em>km/h</em></div>
+  <div class="spd"><span>Car</span><input type="number" id="sp_car" min="0.5" max="2000" step="0.5"><em>km/h</em></div>
+  <div class="spd"><span>Plane</span><input type="number" id="sp_plane" min="0.5" max="2000" step="0.5"><em>km/h</em></div>
+  <div class="lbl sp">When Route Ends</div>
+  <div class="chips three" id="endChips">
+    <button class="chip act" data-e="stay">Stay There</button>
+    <button class="chip" data-e="back">Go Back</button>
+    <button class="chip" data-e="real">Real Location</button>
+  </div>
+  <label class="check sp"><input type="checkbox" id="onRoad" checked> Follow roads on routes</label>
+  <div class="lbl sp">Arrival Time</div>
+  <div class="spd" style="margin-top:0"><span>Travel time</span><input type="number" id="etaMin" min="1" max="100000" step="1" placeholder="Off"><em>min</em></div>
+  <div class="hint">If you enter a time, the speed is set automatically from the route length. Leave it empty to use the selected vehicle’s speed.</div>
+  <div class="lbl sp">My Real Location</div>
+  <div class="row">
+    <button class="pbtn" id="btnFind">Auto Detect</button>
+    <button class="pbtn" id="btnPin">Pin Map Center</button>
+  </div>
+  <div class="hint" id="realTxt">The iPhone’s real GPS position cannot be read from the computer. Windows location or your pinned point is used; “Pin Map Center” makes the map center your real location.</div>
+  <div class="row sp">
+    <button class="pbtn warn" id="btnReset">Return to Real Location</button>
+  </div>
+  <div id="stTxt">…</div>
+  <div class="lbl" style="margin-top:12px;opacity:.7">F2: Hide / show UI · Esc: Close</div>
+</div>
+<div id="toast"></div>
+<div id="reveal" title="Show UI"><i></i></div>
+
+<script>
+const $ = id => document.getElementById(id);
+/* ---- harita stili: lacivert + tek ek renk (kehribar ana yollar) ---- */
+const P = {land:'#0a1129', water:'#0c2152', park:'#0b1d3a', build:'#0f1a40',
+           roadLow:'#17275b', roadMid:'#243b8c', roadHi:'#3552b8', amber:'#d9a85f',
+           label:'#7f8fc6', place:'#c4cff8', halo:'#060b1f'};
+const W = (a, b, c) => ['interpolate', ['exponential', 1.45], ['zoom'], 6, a, 12, b, 18, c];
+const CLS = (...v) => ['in', ['get', 'class'], ['literal', v]];
+const NAME = ['coalesce', ['get', 'name:tr'], ['get', 'name']];
+const road = (id, filter, color, w, extra) => Object.assign({id, type:'line', source:'ofm', 'source-layer':'transportation', filter,
+  layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':color,'line-width':w}}, extra || {});
+const place = (id, classes, minzoom, size, font, color) => ({id, type:'symbol', source:'ofm', 'source-layer':'place', minzoom,
+  filter: CLS(...classes),
+  layout:{'text-field':NAME,'text-font':[font],'text-size':size,'text-max-width':8,'text-letter-spacing':.02},
+  paint:{'text-color':color,'text-halo-color':P.halo,'text-halo-width':1.4}});
+
+const STYLE = {
+  version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sources: {ofm: {type:'vector', url:'https://tiles.openfreemap.org/planet',
+    attribution:'<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank">OpenMapTiles</a> © OpenStreetMap'}},
+  layers: [
+    {id:'bg', type:'background', paint:{'background-color':P.land}},
+    {id:'landcover', type:'fill', source:'ofm', 'source-layer':'landcover', paint:{'fill-color':P.park,'fill-opacity':.55}},
+    {id:'park', type:'fill', source:'ofm', 'source-layer':'park', paint:{'fill-color':P.park,'fill-opacity':.8}},
+    {id:'water', type:'fill', source:'ofm', 'source-layer':'water', paint:{'fill-color':P.water}},
+    {id:'waterway', type:'line', source:'ofm', 'source-layer':'waterway', paint:{'line-color':P.water,'line-width':W(.4,1.2,3)}},
+    {id:'building', type:'fill', source:'ofm', 'source-layer':'building', minzoom:14, paint:{'fill-color':P.build,'fill-opacity':.9}},
+    road('road-path', CLS('path','pedestrian'), P.roadLow, W(.2,.8,3), {minzoom:14, paint:{'line-color':P.roadLow,'line-width':W(.2,.8,3),'line-dasharray':[2,2]}}),
+    road('road-minor', CLS('minor','service','track','street','street_limited'), P.roadLow, W(.3,1.4,9)),
+    road('road-tertiary', CLS('tertiary'), P.roadMid, W(.4,1.8,12)),
+    road('road-secondary', CLS('secondary'), P.roadMid, W(.5,2.2,14)),
+    road('road-primary', CLS('primary'), P.roadHi, W(.6,2.8,16)),
+    road('road-major', CLS('motorway','trunk'), P.amber, W(.8,3.2,18)),
+    {id:'road-names', type:'symbol', source:'ofm', 'source-layer':'transportation_name', minzoom:14,
+      layout:{'symbol-placement':'line','text-field':NAME,'text-font':['Noto Sans Regular'],'text-size':11,'text-letter-spacing':.04},
+      paint:{'text-color':P.label,'text-halo-color':P.halo,'text-halo-width':1.3}},
+    place('pl-sub', ['suburb','neighbourhood','quarter'], 12, 11.5, 'Noto Sans Regular', P.label),
+    place('pl-village', ['village','hamlet'], 10, 12, 'Noto Sans Regular', P.label),
+    place('pl-town', ['town'], 8, 13.5, 'Noto Sans Bold', P.place),
+    place('pl-city', ['city'], 3, 16, 'Noto Sans Bold', P.place)
+  ]
+};
+
+const TR_VIEW = [39.0, 35.2];                      /* Turkiye ortasi (lat, lon) - sadece baslangic gorunumu */
+let S = {real:null, favs:[], recents:[], endMode:'stay'};   /* kalici ayarlar */
+let mode = 'tp', target = null, tgtMarker = null, meMarker = null, ready = false, userMoved = false;
+let wps = [], wpMarkers = [], lastSt = null, busyPlan = false, following = false;
+let realPos = null, eyeSpoofed = null, curPos = null, offlineLocal = false;
+
+let startView = {c:[TR_VIEW[1], TR_VIEW[0]], z:5};
+try { const v = JSON.parse(localStorage.getItem('kd_view') || 'null'); if (v && isFinite(v.lon) && isFinite(v.lat)) startView = {c:[v.lon, v.lat], z:v.z || 12}; } catch(e){}
+
+const map = new maplibregl.Map({container:'map', style:STYLE, center:startView.c, zoom:startView.z,
+  attributionControl:false, dragRotate:false, pitchWithRotate:false, fadeDuration:0, maxPitch:0,
+  maxTileCacheSize:160, refreshExpiredTiles:false, renderWorldCopies:false});
+map.touchZoomRotate.disableRotation();
+map.scrollZoom.disable();
+/* kendi tekerlek zoom'umuz: her karede hedefe dogru yumusak yaklasir, imlecin altindaki nokta sabit kalir */
+let zTarget = 0, zAnim = 0, zAnchor = null, zLast = 0;
+const zc = map.getContainer();
+zc.addEventListener('wheel', e => {
+  e.preventDefault();
+  let d = e.deltaY; if (e.deltaMode === 1) d *= 33; else if (e.deltaMode === 2) d *= 400;
+  d = Math.max(-240, Math.min(240, d));
+  if (!zAnim) zTarget = map.getZoom();
+  zTarget = Math.max(2, Math.min(19, zTarget - d * 0.0042));
+  const r = zc.getBoundingClientRect();
+  zAnchor = {x:e.clientX - r.left, y:e.clientY - r.top, w:r.width, h:r.height};
+  zAnchor.ll = map.unproject([zAnchor.x, zAnchor.y]);
+  if (!zAnim){ zLast = performance.now(); zAnim = requestAnimationFrame(zStep); }
+}, {passive:false});
+function zStep(now){
+  const dt = Math.min(48, now - zLast); zLast = now;
+  const z0 = map.getZoom(), k = 1 - Math.exp(-dt / 85);
+  let z = z0 + (zTarget - z0) * k;
+  if (Math.abs(zTarget - z) < 0.0015) z = zTarget;
+  const a = zAnchor, ws = 512 * Math.pow(2, z);
+  const m = maplibregl.MercatorCoordinate.fromLngLat(a.ll);
+  const c = new maplibregl.MercatorCoordinate(m.x - (a.x - a.w/2) / ws, m.y - (a.y - a.h/2) / ws, 0).toLngLat();
+  map.jumpTo({zoom:z, center:c});
+  zAnim = (z === zTarget) ? 0 : requestAnimationFrame(zStep);
+}
+map.addControl(new maplibregl.AttributionControl({compact:true}), 'bottom-right');
+map.on('dragstart', () => { userMoved = true; following = false; });
+map.on('moveend', () => { try { const c = map.getCenter(); localStorage.setItem('kd_view', JSON.stringify({lat:c.lat, lon:c.lng, z:map.getZoom()})); } catch(e){} });
+
+const emptyFC = {type:'FeatureCollection', features:[]};
+map.on('load', () => {
+  map.addSource('plan', {type:'geojson', data:emptyFC});
+  map.addSource('route', {type:'geojson', data:emptyFC});
+  map.addLayer({id:'plan-line', type:'line', source:'plan', layout:{'line-cap':'round'},
+    paint:{'line-color':'#7fd0ff','line-width':2,'line-opacity':.65,'line-dasharray':[1,2.2]}});
+  map.addLayer({id:'route-glow', type:'line', source:'route', layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':'#4d7cff','line-width':10,'line-opacity':.28}});
+  map.addLayer({id:'route-core', type:'line', source:'route', layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':'#8fb0ff','line-width':4}});
+  ready = true;
+});
+let mapErrShown = false;
+map.on('error', () => { if (!mapErrShown) { mapErrShown = true; toast('Problem loading the map, check your internet connection'); setTimeout(() => mapErrShown = false, 30000); } });
+
+function toast(msg, ok){
+  const t = $('toast'); t.textContent = msg; t.className = ok ? 'ok' : ''; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 4200);
+}
+const fmt = (lat, lon) => lat.toFixed(5) + ', ' + lon.toFixed(5);
+async function call(name, ...a){
+  try {
+    const r = await pywebview.api[name](...a);
+    if (r && r.ok === false) { toast(r.error || 'Hata'); return null; }
+    return r || {ok: true};
+  } catch(e){ toast(String(e)); return null; }
+}
+const dot = cls => { const el = document.createElement('div'); el.className = 'd ' + cls; return el; };
+const fly = (p, minZoom) => map.flyTo({center:[p[1], p[0]], zoom:Math.max(map.getZoom(), minZoom || 15), essential:true, speed:1.6});
+
+/* ---- ayarlari kaydet ---- */
+let speeds = {walk:5, bike:20, car:50, plane:800}, curMode = 'walk';
+const MODES = {walk:{name:'Walk', profile:'foot'}, bike:{name:'Bike', profile:'bike'},
+               car:{name:'Car', profile:'car'}, plane:{name:'Plane', profile:null}};
+const clampSpeed = v => Math.max(0.5, Math.min(2000, parseFloat(v) || 5));
+let saveT = null;
+function saveSettings(){
+  clearTimeout(saveT);
+  saveT = setTimeout(() => { try { pywebview.api.save_settings({speeds: speeds, mode: curMode, onRoad: $('onRoad').checked,
+    endMode: S.endMode, real: S.real, favs: S.favs, recents: S.recents}); } catch(e){} }, 150);
+}
+
+/* ---- tek goz ---- */
+/* ---- tek goz: nokta uzerinde ---- */
+const EYE = '<svg class="eye" viewBox="0 0 64 40"><path class="almond" d="M4 20C14 6 26 2 32 2s18 4 28 18c-10 14-22 18-28 18S14 34 4 20Z"/>'
+  + '<circle class="iris" cx="32" cy="20" r="9"/><circle class="pupil" cx="32" cy="20" r="3.6"/>'
+  + '<path class="x" d="M20 6 44 34M44 6 20 34"/></svg>';
+const GL = {
+  walk:  '<svg class="gl" viewBox="0 0 24 24"><circle cx="13" cy="4" r="1.9"/><path d="M13 7.2 11.5 14M13 8.4l3 3.4 2.2.6M13 8.4l-3.4 2.4L8 13.4M11.5 14l2.6 3.4-.4 3.6M11.5 14l-2 3.2-1.6 3.6"/></svg>',
+  bike:  '<svg class="gl" viewBox="0 0 24 24"><circle cx="6" cy="16.5" r="3.5"/><circle cx="18" cy="16.5" r="3.5"/><path d="M6 16.5 9.5 8.5H15l3 8M9.5 8.5 13 16.5 15 8.5M15 8.5l-1-3h2.6M8 7h3.2"/></svg>',
+  car:   '<svg class="gl" viewBox="0 0 24 24"><path d="M3 15v-3.2l2.2-.6L8 7.5h7.4l2.8 3.7 2.8.8V15H3Z"/><circle cx="7.5" cy="16" r="1.9"/><circle cx="16.5" cy="16" r="1.9"/><path d="M8.6 11h6.3"/></svg>',
+  plane: '<svg class="gl solid" viewBox="0 0 24 24"><path d="M12 2c.8 0 1.4 1 1.4 2.4V9l8 4.6v2l-8-2.2V18l2.2 1.7v1.6L12 20.6l-3.6.7v-1.6L10.6 18v-4.6l-8 2.2v-2l8-4.6V4.4C10.6 3 11.2 2 12 2Z"/></svg>'
+};
+document.querySelectorAll('.mode[data-k]').forEach(b => b.innerHTML = GL[b.dataset.k]);
+
+document.querySelectorAll('.mode[data-k]').forEach(b => b.innerHTML = GL[b.dataset.k]);
+
+/* isaretci: yumusak kayma (saniyede bir gelen konumlar arasinda ara deger) */
+let tw = null;
+function placeMe(p, smooth){
+  curPos = p;
+  if (!meMarker){
+    const el = document.createElement('div'); el.className = 'meWrap';
+    el.innerHTML = '<div class="mbadge' + (eyeSpoofed ? ' spoof' : '') + '">' + GL[curMode] + '</div>';
+    meMarker = new maplibregl.Marker({element: el, anchor: 'center'}).setLngLat([p[1], p[0]]).addTo(map);
+    meMarker.__ll = [p[1], p[0]];
+    return;
+  }
+  const from = meMarker.__ll, to = [p[1], p[0]];
+  cancelAnimationFrame(tw);
+  const d = Math.abs(from[0] - to[0]) + Math.abs(from[1] - to[1]);
+  if (!smooth || d < 1e-9 || d > 0.05){ meMarker.setLngLat(to); meMarker.__ll = to; return; }
+  const t0 = performance.now(), dur = 950;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur);
+    const ll = [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k];
+    meMarker.setLngLat(ll); meMarker.__ll = ll;
+    if (k < 1) tw = requestAnimationFrame(step);
+  };
+  tw = requestAnimationFrame(step);
+}
+function morphBadge(k){
+  if (!meMarker) return;
+  const wrap = meMarker.getElement(), b = wrap.querySelector('.mbadge');
+  b.getAnimations().forEach(a => a.cancel());
+  const out = b.animate([{transform:'scale(1) rotate(0deg)', opacity:1}, {transform:'scale(.12) rotate(-140deg)', opacity:.1}],
+    {duration:210, easing:'cubic-bezier(.5,0,.9,.4)', fill:'forwards'});
+  out.onfinish = () => {
+    b.innerHTML = GL[k];
+    b.animate([{transform:'scale(.12) rotate(140deg)', opacity:.1}, {transform:'scale(1.22) rotate(0deg)', opacity:1, offset:.68}, {transform:'scale(1) rotate(0deg)', opacity:1}],
+      {duration:420, easing:'cubic-bezier(.2,.8,.3,1)', fill:'forwards'});
+    const r = document.createElement('i'); r.className = 'ring'; wrap.appendChild(r);
+    r.animate([{transform:'scale(.7)', opacity:.75}, {transform:'scale(2.8)', opacity:0}], {duration:720, easing:'ease-out'}).onfinish = () => r.remove();
+  };
+}
+/* spoofed=true: goz kapali + X, simulasyon konumunda. false: acik goz, gercek konumda (biliniyorsa) */
+function applyEye(spoofed, pos){
+  const p = spoofed ? (pos || curPos || realPos) : realPos;
+  if (p) placeMe(p, spoofed && eyeSpoofed === true);
+  if (meMarker && spoofed !== eyeSpoofed){
+    eyeSpoofed = spoofed;
+    meMarker.getElement().querySelector('.mbadge').classList.toggle('spoof', spoofed);
+  }
+}
+
+/* ---- gercek konum: kayitli nokta > Windows konumu > IP ---- */
+function setReal(lat, lon, fly_){
+  realPos = [lat, lon];
+  if (!eyeSpoofed) applyEye(false);
+  if (fly_) map.jumpTo({center:[lon, lat], zoom:Math.max(map.getZoom(), 14)});
+  $('realTxt').textContent = 'Real location: ' + fmt(lat, lon);
+}
+async function locateReal(manual){
+  if (!manual && S.real){ setReal(S.real[0], S.real[1], !userMoved); return; }
+  $('realTxt').textContent = 'Looking for location…';
+  const r = await call('locate_real');
+  if (r && r.data){
+    setReal(r.data.pos[0], r.data.pos[1], true);
+    if (r.data.src === 'ip') toast('Windows location is off: using an approximate IP-based location. For an exact point, center the map and press “Pin Map Center”.');
+    else if (manual) toast('Real location found', true);
+  } else {
+    $('realTxt').textContent = 'Not found. Center the map on your place and press “Pin Map Center”.';
+    if (manual) toast('Location not found');
+  }
+}
+$('btnFind').onclick = () => locateReal(true);
+$('btnPin').onclick = () => {
+  const c = map.getCenter(); S.real = [c.lat, c.lng]; saveSettings();
+  setReal(c.lat, c.lng, false); toast('Pinned as your real location', true);
+};
+
+/* ---- ayar penceresi ---- */
+function togglePop(force){
+  const open = force === undefined ? !$('pop').classList.contains('open') : force;
+  $('pop').classList.toggle('open', open); $('scrim').classList.toggle('open', open);
+}
+$('gear').onclick = () => togglePop();
+$('scrim').onclick = () => togglePop(false);
+function setEnd(e, save){
+  S.endMode = e;
+  document.querySelectorAll('#endChips .chip').forEach(c => c.classList.toggle('act', c.dataset.e === e));
+  if (save !== false) saveSettings();
+}
+document.querySelectorAll('#endChips .chip').forEach(c => c.onclick = () => setEnd(c.dataset.e));
+
+/* ---- arayuzu gizle / goster ---- */
+function toggleUi(){
+  const hide = !$('ui').classList.contains('hidden');
+  $('ui').classList.toggle('hidden', hide); $('reveal').classList.toggle('show', hide);
+  if (hide) togglePop(false);
+}
+$('reveal').onclick = toggleUi;
+document.addEventListener('keydown', e => {
+  if (e.key === 'F2') { e.preventDefault(); toggleUi(); }
+  else if (e.key === 'Escape') { togglePop(false); closeSug(); }
+});
+
+/* ---- zoom / konumuma git ---- */
+$('zIn').onclick = () => map.zoomIn({duration:250});
+$('zOut').onclick = () => map.zoomOut({duration:250});
+$('zMe').onclick = () => {
+  const p = (lastSt && lastSt.pos) || realPos;
+  if (!p) { toast('Real location unknown yet (you can pin it in settings)'); return; }
+  following = !!(lastSt && lastSt.moving); fly(p);
+};
+
+/* ---- mod ---- */
+function setMode(m){
+  mode = m;
+  $('mTp').classList.toggle('act', m === 'tp'); $('mRt').classList.toggle('act', m === 'rt');
+  updateInfo(); updateButtons();
+}
+$('mTp').onclick = () => setMode('tp');
+$('mRt').onclick = () => setMode('rt');
+function updateInfo(){
+  if (lastSt && lastSt.moving) { $('info').textContent = (lastSt.paused ? 'Paused · ' : 'On the way · ') + Math.round(lastSt.speed || 0) + ' km/h'; return; }
+  if (mode === 'tp') $('info').textContent = target ? fmt(target[0], target[1]) : 'Pick a point on the map';
+  else $('info').textContent = wps.length ? (wps.length + ' points selected') : 'Click the map to add route points';
+}
+
+/* ---- harita tiklama ---- */
+map.on('click', e => { closeSug(); if (mode === 'tp') setTarget(e.lngLat.lat, e.lngLat.lng); else addWp(e.lngLat.lat, e.lngLat.lng); });
+function setTarget(lat, lon){
+  target = [lat, lon];
+  if (tgtMarker) tgtMarker.setLngLat([lon, lat]); else tgtMarker = new maplibregl.Marker({element: dot('tgt')}).setLngLat([lon, lat]).addTo(map);
+  updateInfo(); updateButtons();
+}
+function addWp(lat, lon){
+  wps.push([lat, lon]);
+  wpMarkers.push(new maplibregl.Marker({element: dot('wp')}).setLngLat([lon, lat]).addTo(map));
+  drawLine(wps, true); updateInfo(); updateButtons();
+}
+function drawLine(pts, dashed){
+  if (!ready) return;
+  const fc = c => c.length > 1 ? {type:'FeatureCollection', features:[{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c.map(p => [p[1], p[0]])}}]} : emptyFC;
+  map.getSource('plan').setData(dashed ? fc(pts) : emptyFC);
+  map.getSource('route').setData(dashed ? emptyFC : fc(pts));
+}
+function clearRoute(){
+  wps = []; wpMarkers.forEach(m => m.remove()); wpMarkers = []; drawLine([], true); updateInfo(); updateButtons();
+}
+$('btnUndo').onclick = () => { if (!wps.length) return; wps.pop(); wpMarkers.pop().remove(); drawLine(wps, true); updateInfo(); updateButtons(); };
+$('btnClr').onclick = clearRoute;
+
+/* ---- arama: oneri listesi, favoriler, son aramalar ---- */
+const SVG_STAR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 16.9 6.6 19.8l1.1-6.1L3.2 9.4l6.1-.8L12 3Z"/></svg>';
+const SVG_PIN = '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.4"/></svg>';
+const SVG_CLOCK = '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+const keyOf = p => p.lat.toFixed(4) + ',' + p.lon.toFixed(4);
+const isFav = p => S.favs.some(f => keyOf(f) === keyOf(p));
+let sugItems = [], sugSel = -1, sugSeq = 0, sugTimer = null;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function closeSug(){ $('sug').classList.remove('open'); sugSel = -1; }
+function renderSug(sections, emptyMsg){
+  const box = $('sug'); let html = ''; sugItems = [];
+  sections.forEach(sec => {
+    if (!sec.items.length) return;
+    if (sec.title) html += '<h6>' + sec.title + '</h6>';
+    sec.items.forEach(it => {
+      const i = sugItems.push(it) - 1;
+      html += '<div class="si" data-i="' + i + '">' + (sec.icon || SVG_PIN) + '<div class="t"><b>' + esc(it.name) + '</b>'
+        + (it.sub ? '<small>' + esc(it.sub) + '</small>' : '') + '</div>'
+        + (it.coord ? '' : '<button class="star' + (isFav(it) ? ' on' : '') + '" data-i="' + i + '" title="Add / remove favorite">' + SVG_STAR + '</button>') + '</div>';
+    });
+  });
+  if (!sugItems.length) html = emptyMsg ? '<div class="sempty">' + emptyMsg + '</div>' : '';
+  box.innerHTML = html; box.classList.toggle('open', !!html); sugSel = -1;
+}
+function showStored(){
+  renderSug([{title:'Favorites', items:S.favs, icon:SVG_STAR.replace('<svg ', '<svg class="ic" ')},
+             {title:'Recent searches', items:S.recents.filter(r => !isFav(r)), icon:SVG_CLOCK}], '');
+}
+function pickSug(it){
+  closeSug(); $('q').value = it.name; $('q').blur();
+  if (!it.coord){
+    S.recents = [it].concat(S.recents.filter(r => keyOf(r) !== keyOf(it))).slice(0, 8); saveSettings();
+  }
+  fly([it.lat, it.lon], 16);
+  if (mode === 'tp') setTarget(it.lat, it.lon); else addWp(it.lat, it.lon);
+}
+async function runSuggest(q){
+  const m = q.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)\s*$/);
+  if (m){
+    const lat = parseFloat(m[1].replace(',', '.')), lon = parseFloat(m[2].replace(',', '.'));
+    if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180){
+      renderSug([{title:'Coordinates', items:[{name:fmt(lat, lon), sub:'Go to these coordinates', lat:lat, lon:lon, coord:true}]}], ''); return;
+    }
+  }
+  const seq = ++sugSeq;
+  const c = map.getCenter();
+  $('sug').classList.add('open');
+  if (!sugItems.length) $('sug').innerHTML = '<div class="sempty">Searching…</div>';
+  const r = await pywebview.api.suggest(q, c.lat, c.lng).catch(() => null);
+  if (seq !== sugSeq) return;
+  if (!r || r.ok === false){ renderSug([], 'Search unavailable: check your internet connection'); return; }
+  renderSug([{title:'', items:r.data}], 'No results');
+}
+$('q').addEventListener('input', () => {
+  clearTimeout(sugTimer);
+  const q = $('q').value.trim();
+  if (!q){ sugSeq++; showStored(); return; }
+  if (q.length < 2) return;
+  sugTimer = setTimeout(() => runSuggest(q), 260);
+});
+$('q').addEventListener('focus', () => { if (!$('q').value.trim()) showStored(); else if (sugItems.length) $('sug').classList.add('open'); });
+function moveSel(d){
+  const els = $('sug').querySelectorAll('.si'); if (!els.length) return;
+  sugSel = (sugSel + d + els.length) % els.length;
+  els.forEach((e, i) => e.classList.toggle('sel', i === sugSel));
+  els[sugSel].scrollIntoView({block:'nearest'});
+}
+$('q').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'ArrowDown'){ e.preventDefault(); moveSel(1); }
+  else if (e.key === 'ArrowUp'){ e.preventDefault(); moveSel(-1); }
+  else if (e.key === 'Escape'){ closeSug(); $('q').blur(); }
+  else if (e.key === 'Enter'){
+    clearTimeout(sugTimer);
+    const q = $('q').value.trim();
+    if (sugSel >= 0 && sugItems[sugSel]) pickSug(sugItems[sugSel]);
+    else if (sugItems.length && q) pickSug(sugItems[0]);
+    else if (q) runSuggest(q);
+  }
+});
+$('sug').addEventListener('mousedown', e => e.preventDefault());
+$('sug').addEventListener('click', e => {
+  const st = e.target.closest('.star');
+  if (st){
+    const it = sugItems[+st.dataset.i];
+    if (isFav(it)) S.favs = S.favs.filter(f => keyOf(f) !== keyOf(it));
+    else S.favs = [{name:it.name, sub:it.sub, lat:it.lat, lon:it.lon}].concat(S.favs);
+    saveSettings(); st.classList.toggle('on', isFav(it)); e.stopPropagation(); return;
+  }
+  const row = e.target.closest('.si'); if (row) pickSug(sugItems[+row.dataset.i]);
+});
+document.addEventListener('mousedown', e => { if (!e.target.closest('#search')) closeSug(); });
+
+/* ---- modlar ---- */
+function refreshModeTitles(){
+  document.querySelectorAll('.mode[data-k]').forEach(b => b.title = MODES[b.dataset.k].name + ' · ' + speeds[b.dataset.k] + ' km/h');
+  Object.keys(speeds).forEach(k => { const i = $('sp_' + k); if (i && document.activeElement !== i) i.value = speeds[k]; });
+}
+function setVehicle(k, push){
+  curMode = k;
+  document.querySelectorAll('.mode[data-k]').forEach(b => b.classList.toggle('act', b.dataset.k === k));
+  morphBadge(k);
+  if (push !== false) call('set_speed', speeds[k]);
+  saveSettings(); refreshModeTitles();
+}
+document.querySelectorAll('.mode[data-k]').forEach(b => b.onclick = () => setVehicle(b.dataset.k));
+Object.keys(speeds).forEach(k => { $('sp_' + k).onchange = e => {
+  speeds[k] = clampSpeed(e.target.value); e.target.value = speeds[k];
+  if (k === curMode) call('set_speed', speeds[k]);
+  saveSettings(); refreshModeTitles();
+}; });
+$('onRoad').onchange = saveSettings;
+refreshModeTitles();
+
+/* ---- islemler ---- */
+$('btnTp').onclick = async () => {
+  if (!target) return;
+  const r = await call('teleport', target[0], target[1]);
+  if (r) { toast('Teleported', true); applyEye(true, target); fly(target, 15); }
+};
+const hav = (a, b) => { const r = Math.PI / 180, x = Math.sin((b[0]-a[0])*r/2)**2 + Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin((b[1]-a[1])*r/2)**2; return 12742000 * Math.asin(Math.sqrt(x)); };
+const pathLen = p => { let d = 0; for (let i = 1; i < p.length; i++) d += hav(p[i-1], p[i]); return d; };
+$('btnGo').onclick = async () => {
+  if (busyPlan) return;
+  let speed = speeds[curMode];
+  let pts = wps.slice();
+  if (lastSt && lastSt.pos) pts.unshift(lastSt.pos);
+  if (pts.length < 2) { toast('En az 2 nokta gerekli'); return; }
+  let path = pts;
+  if ($('onRoad').checked && MODES[curMode].profile) {
+    busyPlan = true; $('btnGo').textContent = 'Finding route…'; $('btnGo').disabled = true;
+    const r = await pywebview.api.plan_route(pts, MODES[curMode].profile);
+    busyPlan = false; $('btnGo').textContent = 'Start';
+    if (r && r.ok && r.data && r.data.length > 1) path = r.data;
+    else toast('No route found, using a straight line' + (r && r.error ? ' (' + r.error + ')' : ''));
+  }
+  drawLine(path, false);
+  const etaMin = parseFloat($('etaMin').value);
+  let msg = 'Movement started';
+  if (etaMin > 0){
+    const km = pathLen(path) / 1000;
+    speed = Math.max(0.5, Math.min(5000, km / (etaMin / 60)));
+    msg = km.toFixed(1) + ' km · ' + etaMin + ' min · ' + Math.round(speed) + ' km/h';
+  }
+  const r2 = await call('start_route', path, speed, S.endMode);
+  if (r2) { toast(msg, true); following = true; applyEye(true, path[0]); fly(path[0], 16); }
+  updateButtons();
+};
+$('btnPause').onclick = async () => { if (lastSt && lastSt.paused) await call('resume'); else await call('pause'); };
+$('btnStop').onclick = () => { following = false; call('stop'); };
+$('btnReset').onclick = async () => {
+  const r = await call('reset');
+  if (r) { toast('Returned to real location', true); togglePop(false); following = false; applyEye(false); if (realPos) fly(realPos, 14); }
+};
+
+/* ---- sol ustteki hap: tek dokunusla cevrimdisi / cevrimici ---- */
+$('dev').onclick = async () => {
+  const on = lastSt && (lastSt.connected || lastSt.connecting);
+  following = false;
+  if (on){
+    offlineLocal = true; renderDev();                       /* aninda cevrimdisi gorunsun */
+    applyEye(false);
+    clearRoute();
+    const r = await call('toggle_connection');
+    offlineLocal = false;
+    if (r) toast('Offline · returned to real location', true);
+  } else {
+    offlineLocal = false; $('devTxt').textContent = 'Connecting…';
+    $('dev').classList.add('busy');
+    const r = await call('toggle_connection');
+    if (r) toast('Connected to phone', true);
+  }
+  refresh();
+};
+function renderDev(){
+  const st = lastSt || {}, dev = $('dev');
+  let txt, cls = '';
+  if (offlineLocal) txt = 'Offline';
+  else if (st.connected){ txt = st.device || 'iPhone'; cls = 'on'; }
+  else if (st.connecting){ txt = 'Connecting…'; cls = 'busy'; }
+  else if (st.manualOff) txt = 'Offline';
+  else if (!st.present) txt = 'Waiting for phone';
+  else { txt = 'Connecting…'; cls = 'busy'; }
+  dev.classList.toggle('on', cls === 'on'); dev.classList.toggle('busy', cls === 'busy');
+  $('devTxt').textContent = txt;
+  $('stTxt').textContent = offlineLocal ? 'Offline' : (st.connected ? 'Connected to phone' : (st.message || ''));
+}
+
+/* ---- durum ---- */
+function show(id, v){ $(id).style.display = v ? '' : 'none'; }
+function updateButtons(){
+  const st = lastSt || {}, ok = !!st.connected, mv = !!st.moving;
+  const tp = mode === 'tp', rt = mode === 'rt';
+  show('btnTp', tp && !mv); show('btnGo', rt && !mv);
+  show('btnUndo', rt && !mv); show('btnClr', rt && !mv);
+  show('btnPause', mv); show('btnStop', mv);
+  $('btnTp').disabled = !(ok && target);
+  const need = st.pos ? 1 : 2;
+  $('btnGo').disabled = !(ok && wps.length >= need) || busyPlan;
+  $('btnPause').textContent = st.paused ? 'Resume' : 'Pause';
+  $('barBox').style.display = mv ? 'block' : 'none';
+}
+let polling = false;
+async function refresh(){
+  if (polling) return; polling = true;
+  try {
+    let st;
+    try { st = await pywebview.api.status(); } catch(e){ return; }
+    const wasMoving = lastSt && lastSt.moving, wasConn = lastSt && lastSt.connected;
+    lastSt = st;
+    renderDev();
+    if (wasConn && !st.connected && !st.manualOff && !offlineLocal){ following = false; clearRoute(); }
+    applyEye(!!st.pos && st.connected, st.pos);
+    $('prog').style.width = (st.progress * 100).toFixed(1) + '%';
+    if (st.moving && following && st.pos && !zAnim) map.easeTo({center:[st.pos[1], st.pos[0]], duration:1000, easing:t => t, essential:true});
+    if (wasMoving && !st.moving && st.progress >= 1){
+      toast(S.endMode === 'real' ? 'Arrived · returned to real location' : 'Arrived', true); clearRoute(); following = false;
+    }
+    updateInfo(); updateButtons();
+  } finally { polling = false; }
+}
+
+window.addEventListener('pywebviewready', async () => {
+  try {
+    const r = await pywebview.api.get_settings();
+    if (r && r.ok && r.data){
+      const d = r.data;
+      if (d.speeds) Object.keys(speeds).forEach(k => { if (d.speeds[k] != null) speeds[k] = clampSpeed(d.speeds[k]); });
+      if (typeof d.onRoad === 'boolean') $('onRoad').checked = d.onRoad;
+      if (d.mode && MODES[d.mode]) { curMode = d.mode; document.querySelectorAll('.mode[data-k]').forEach(b => b.classList.toggle('act', b.dataset.k === curMode)); }
+      S.real = d.real || null; S.favs = d.favs || []; S.recents = d.recents || [];
+      setEnd(d.endMode || 'stay', false);
+    }
+  } catch(e){}
+  refreshModeTitles();
+  call('set_speed', speeds[curMode]);
+  setInterval(refresh, 1000); refresh();
+  locateReal(false);
+});
+</script>
+</body>
+</html>
